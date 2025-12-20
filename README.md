@@ -6,7 +6,7 @@
 curl -L https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh -o install.sh && chmod +x install.sh && bash install.sh
 
 ## 访问
-http://你的IP:54321/（默认路径/，或自定义如/forcoo）
+http://你的IP:54321/（默认路径/，或自定义）
 
 ## 版本
 v25.9.25 (通用x86_64/ARM64)。
