@@ -1,5 +1,5 @@
 #!/bin/bash
-# X-Panel一键安装脚本 - 通用版，v25.9.25，支持x86/ARM IP访问
+# X-Panel一键安装脚本 - 优化版，v25.9.25，支持通用架构IP访问
 # 用法: bash install.sh
 
 red() { echo -e "\033[31m\033[01m$1\033[0m"; }
@@ -55,7 +55,7 @@ install_core() {
     fi
 
     # 复制文件
-    mkdir -p /usr/local/x-ui/bin
+    mkdir -p /usr/local/x-ui/bin /usr/local/x-ui/db
     cp x-ui.sh /usr/bin/x-ui && chmod +x /usr/bin/x-ui
     cp x-ui /usr/local/x-ui/x-ui && chmod +x /usr/local/x-ui/x-ui
     cp x-ui.service /etc/systemd/system/
@@ -73,18 +73,44 @@ install_core() {
     wget -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat >/dev/null 2>&1
     wget -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat >/dev/null 2>&1
 
-    # 自动配置config.json允许IP访问
+    # 自动生成默认config.json允许IP访问
     cat > bin/config.json << EOF
 {
-  "web": {
-    "listen": "0.0.0.0:54321",
-    "certFile": "",
-    "keyFile": ""
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "tag": "direct"
+    }
+  ],
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "rules": []
+  },
+  "policy": {
+    "levels": {
+      "0": {
+        "handshake": 4,
+        "connIdle": 300,
+        "uplinkOnly": 2,
+        "downlinkOnly": 5,
+        "statsUserUplink": true,
+        "statsUserDownlink": true,
+        "bufferSize": 10240
+      }
+    },
+    "system": {
+      "statsInboundUplink": true,
+      "statsInboundDownlink": true
+    }
   }
 }
 EOF
     cp bin/config.json /usr/local/x-ui/bin/config.json
-    yellow "配置IP访问 (0.0.0.0:54321)"
+    yellow "生成默认config.json (IP访问: 0.0.0.0:54321)"
 
     cd /tmp && rm -rf x-ui-src
     systemctl daemon-reload
@@ -109,13 +135,13 @@ firewall_setting() {
 
 main() {
     export LANG=en_US.UTF-8
-    echo -e "\n$$ {green}安装自定义X-Panel v25.9.25... $${yellow}"
+    echo -e "\n${green}安装自定义X-Panel v25.9.25...${yellow}"
     install_deps
     install_core
     firewall_setting
     IP=$(curl -s ipinfo.io/ip || echo "your-server-ip")
-    echo -e "\n$$ {green}成功！ $${yellow}"
-    echo "地址: http://${IP}:54321/ (IP直连启用，路径/forcoo)"
+    echo -e "\n${green}成功！${yellow}"
+    echo "地址: http://${IP}:54321/ (IP直连启用)"
     echo "用户名/密码: admin/admin (立即修改: x-ui user)"
     echo "状态: x-ui status"
     echo "日志: x-ui log"
