@@ -1,5 +1,5 @@
 #!/bin/bash
-# X-Panel一键安装脚本 - 修正版，基于您的仓库结构
+# X-Panel一键安装脚本 - 最终版，添加LFS pull + geo
 # 用法: bash install.sh
 
 red() { echo -e "\033[31m\033[01m$1\033[0m"; }
@@ -19,7 +19,7 @@ fi
 install_deps() {
     yellow "安装依赖..."
     ${system_package} update -y >/dev/null 2>&1
-    ${system_package} install -y curl wget unzip git jq unzip -y >/dev/null 2>&1
+    ${system_package} install -y curl wget unzip git jq git-lfs -y >/dev/null 2>&1  # 加git-lfs
 }
 
 install_core() {
@@ -28,20 +28,24 @@ install_core() {
     git clone https://github.com/yosituta/3x-ui.git /tmp/x-ui-src --depth=1
     cd /tmp/x-ui-src || { red "克隆失败！"; exit 1; }
 
-    # 关键修复：分开复制二进制和管理脚本
+    # LFS拉大文件（关键修复）
+    git lfs install --local >/dev/null 2>&1
+    git lfs pull >/dev/null 2>&1 || { yellow "LFS拉取中..."; git lfs fetch && git lfs checkout; }
+
+    # 复制文件
     mkdir -p /usr/local/x-ui/bin
-    cp x-ui.sh /usr/bin/x-ui  # 管理脚本到 /usr/bin/x-ui
+    cp x-ui.sh /usr/bin/x-ui  # 管理脚本
     chmod +x /usr/bin/x-ui
-    cp x-ui /usr/local/x-ui/x-ui  # 面板二进制到正确路径
+    cp x-ui /usr/local/x-ui/x-ui  # 二进制（现完整）
     chmod +x /usr/local/x-ui/x-ui
 
     cp x-ui.service /etc/systemd/system/
-    if [ -d "bin" ]; then
-        cp bin/* /usr/local/x-ui/bin/  # xray内核、geo等
+    if [ -d bin ]; then
+        cp bin/* /usr/local/x-ui/bin/  # xray等
         chmod +x /usr/local/x-ui/bin/*
     fi
 
-    # 下载最新geo文件（X-Panel必需）
+    # geo文件
     cd /usr/local/x-ui/
     wget -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat >/dev/null 2>&1
     wget -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat >/dev/null 2>&1
@@ -50,7 +54,7 @@ install_core() {
     systemctl daemon-reload
     systemctl enable x-ui
     systemctl start x-ui
-    sleep 2  # 等待启动
+    sleep 3
     green "安装完成！"
 }
 
@@ -68,7 +72,7 @@ firewall_setting() {
 }
 
 main() {
-    export LANG=en_US.UTF-8  # 修复颜色输出
+    export LANG=en_US.UTF-8  # 颜色修复
     echo -e "\n$$ {green}安装自定义X-Panel... $${yellow}"
     install_deps
     install_core
