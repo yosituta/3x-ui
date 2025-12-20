@@ -1,5 +1,5 @@
 #!/bin/bash
-# 自定义3X-UI一键安装脚本 - 修正版，支持您的仓库结构
+# X-Panel一键安装脚本 - 修正版，基于您的仓库结构
 # 用法: bash install.sh
 
 red() { echo -e "\033[31m\033[01m$1\033[0m"; }
@@ -19,35 +19,38 @@ fi
 install_deps() {
     yellow "安装依赖..."
     ${system_package} update -y >/dev/null 2>&1
-    ${system_package} install -y curl wget unzip git jq wget unzip -y >/dev/null 2>&1
+    ${system_package} install -y curl wget unzip git jq unzip -y >/dev/null 2>&1
 }
 
 install_core() {
-    yellow "拉取自定义3X-UI..."
+    yellow "拉取自定义X-Panel..."
     rm -rf /usr/local/x-ui /usr/bin/x-ui /etc/systemd/system/x-ui.service
     git clone https://github.com/yosituta/3x-ui.git /tmp/x-ui-src --depth=1
     cd /tmp/x-ui-src || { red "克隆失败！"; exit 1; }
 
-    # 复制核心文件（基于您的仓库结构）
-    cp x-ui /usr/bin/x-ui  # 面板二进制
-    cp x-ui.sh /usr/bin/x-ui  # 管理脚本覆盖（x-ui.sh -> x-ui）
+    # 关键修复：分开复制二进制和管理脚本
+    mkdir -p /usr/local/x-ui/bin
+    cp x-ui.sh /usr/bin/x-ui  # 管理脚本到 /usr/bin/x-ui
     chmod +x /usr/bin/x-ui
+    cp x-ui /usr/local/x-ui/x-ui  # 面板二进制到正确路径
+    chmod +x /usr/local/x-ui/x-ui
 
     cp x-ui.service /etc/systemd/system/
-    mkdir -p /usr/local/x-ui/bin
     if [ -d "bin" ]; then
-        cp bin/* /usr/local/x-ui/bin/  # xray内核
-        chmod +x /usr/local/x-ui/bin/*  # 架构自动（xray-linux-64等）
+        cp bin/* /usr/local/x-ui/bin/  # xray内核、geo等
+        chmod +x /usr/local/x-ui/bin/*
     fi
 
-    # geo文件（如果仓库有，标准3X-UI需）
-    if [ -f "geoip.dat" ]; then cp geoip.dat /usr/local/x-ui/; fi
-    if [ -f "geosite.dat" ]; then cp geosite.dat /usr/local/x-ui/; fi
+    # 下载最新geo文件（X-Panel必需）
+    cd /usr/local/x-ui/
+    wget -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat >/dev/null 2>&1
+    wget -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat >/dev/null 2>&1
 
     cd /tmp && rm -rf x-ui-src
     systemctl daemon-reload
     systemctl enable x-ui
     systemctl start x-ui
+    sleep 2  # 等待启动
     green "安装完成！"
 }
 
@@ -59,13 +62,14 @@ firewall_setting() {
         ufw allow 54321/tcp && ufw reload
     else
         iptables -I INPUT -p tcp --dport 54321 -j ACCEPT
-        iptables-save > /etc/iptables.rules  # CentOS6等
+        iptables-save > /etc/iptables.rules
     fi
     green "端口已放行。"
 }
 
 main() {
-    echo -e "\n$$ {green}安装自定义3X-UI... $${yellow}"
+    export LANG=en_US.UTF-8  # 修复颜色输出
+    echo -e "\n$$ {green}安装自定义X-Panel... $${yellow}"
     install_deps
     install_core
     firewall_setting
@@ -75,6 +79,7 @@ main() {
     echo "用户名/密码: admin/admin"
     echo "修改密码: x-ui user"
     echo "状态: x-ui status"
+    echo "日志: x-ui log"
 }
 
 main "$@"
