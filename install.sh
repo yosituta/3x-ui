@@ -1,5 +1,5 @@
 #!/bin/bash
-# 自定义3X-UI一键安装脚本 - 从您的GitHub仓库拉取
+# 自定义3X-UI一键安装脚本 - 修正版，支持您的仓库结构
 # 用法: bash install.sh
 
 red() { echo -e "\033[31m\033[01m$1\033[0m"; }
@@ -19,22 +19,31 @@ fi
 install_deps() {
     yellow "安装依赖..."
     ${system_package} update -y >/dev/null 2>&1
-    ${system_package} install -y curl wget unzip git jq >/dev/null 2>&1
+    ${system_package} install -y curl wget unzip git jq wget unzip -y >/dev/null 2>&1
 }
 
 install_core() {
     yellow "拉取自定义3X-UI..."
-    rm -rf /usr/local/x-ui /usr/bin/x-ui
+    rm -rf /usr/local/x-ui /usr/bin/x-ui /etc/systemd/system/x-ui.service
     git clone https://github.com/yosituta/3x-ui.git /tmp/x-ui-src --depth=1
-    cd /tmp/x-ui-src
-    cp x-ui.sh /usr/bin/x-ui
+    cd /tmp/x-ui-src || { red "克隆失败！"; exit 1; }
+
+    # 复制核心文件（基于您的仓库结构）
+    cp x-ui /usr/bin/x-ui  # 面板二进制
+    cp x-ui.sh /usr/bin/x-ui  # 管理脚本覆盖（x-ui.sh -> x-ui）
     chmod +x /usr/bin/x-ui
+
     cp x-ui.service /etc/systemd/system/
-    mv x-ui/ /usr/local/
-    ARCH=$(uname -m)
-    if [[ $ARCH == "x86_64" ]]; then XRAY_BIN="xray-linux-64"; fi
-    if [[ $ARCH == "aarch64" ]]; then XRAY_BIN="xray-linux-arm64"; fi
-    chmod +x /usr/local/x-ui/bin/${XRAY_BIN}*
+    mkdir -p /usr/local/x-ui/bin
+    if [ -d "bin" ]; then
+        cp bin/* /usr/local/x-ui/bin/  # xray内核
+        chmod +x /usr/local/x-ui/bin/*  # 架构自动（xray-linux-64等）
+    fi
+
+    # geo文件（如果仓库有，标准3X-UI需）
+    if [ -f "geoip.dat" ]; then cp geoip.dat /usr/local/x-ui/; fi
+    if [ -f "geosite.dat" ]; then cp geosite.dat /usr/local/x-ui/; fi
+
     cd /tmp && rm -rf x-ui-src
     systemctl daemon-reload
     systemctl enable x-ui
@@ -49,7 +58,8 @@ firewall_setting() {
     elif command -v ufw >/dev/null; then
         ufw allow 54321/tcp && ufw reload
     else
-        iptables -I INPUT -p tcp --dport 54321 -j ACCEPT && iptables-save > /etc/iptables.rules
+        iptables -I INPUT -p tcp --dport 54321 -j ACCEPT
+        iptables-save > /etc/iptables.rules  # CentOS6等
     fi
     green "端口已放行。"
 }
@@ -59,11 +69,12 @@ main() {
     install_deps
     install_core
     firewall_setting
-    IP=$(curl -s ipinfo.io/ip)
+    IP=$(curl -s ipinfo.io/ip || echo "your-server-ip")
     echo -e "\n$$ {green}成功！ $${yellow}"
     echo "地址: http://${IP}:54321"
     echo "用户名/密码: admin/admin"
-    echo "修改: x-ui user"
+    echo "修改密码: x-ui user"
+    echo "状态: x-ui status"
 }
 
 main "$@"
