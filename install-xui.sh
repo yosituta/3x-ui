@@ -30,19 +30,28 @@ install_core() {
     yellow "解压x-ui.zip..."
     unzip -o x-ui.zip  # -o覆盖
     rm x-ui.zip  # 清理zip
-    if [ ! -d "x-ui" ]; then { red "解压失败！"; exit 1; }; fi
+
+    # 找解压目录 (支持 "x-ui" 或 "x-ui install" 等)
+    XUI_DIR=$(ls -d x-ui* 2>/dev/null | head -1)
+    if [ -z "$XUI_DIR" ]; then { red "解压失败！无x-ui目录"; exit 1; }; fi
+    green "找到目录: $XUI_DIR"
 
     yellow "准备权限..."
     cd /root/  # 切换到root目录
-    chmod +x x-ui/x-ui x-ui/bin/xray-linux-amd64 x-ui/x-ui.sh  # xray-linux-amd64根据架构调整
+    chmod +x ${XUI_DIR}/x-ui ${XUI_DIR}/bin/xray-linux-amd64 ${XUI_DIR}/x-ui.sh  # xray-linux-amd64根据架构调整
 
     yellow "清理旧安装..."
     rm -rf /usr/local/x-ui/ /usr/bin/x-ui
 
     yellow "复制文件..."
-    cp x-ui/x-ui.sh /usr/bin/x-ui  # 复制管理脚本
-    cp -f x-ui/x-ui.service /etc/systemd/system/  # 复制systemd服务
-    mv x-ui/ /usr/local/  # 移动整个x-ui目录
+    cp ${XUI_DIR}/x-ui.sh /usr/bin/x-ui  # 复制管理脚本
+    cp -f ${XUI_DIR}/x-ui.service /etc/systemd/system/  # 复制systemd服务
+    mv ${XUI_DIR}/ /usr/local/  # 移动整个目录
+
+    # 下载geo文件 (面板需)
+    cd /usr/local/x-ui/
+    wget -O geoip.dat https://github.com/v2fly/geoip/releases/latest/download/geoip.dat >/dev/null 2>&1
+    wget -O geosite.dat https://github.com/v2fly/domain-list-community/releases/latest/download/dlc.dat >/dev/null 2>&1
 
     yellow "启动服务..."
     systemctl daemon-reload
@@ -52,6 +61,9 @@ install_core() {
     yellow "检查状态..."
     sleep 3
     x-ui status
+
+    # 初始化db (首次生成)
+    /usr/local/x-ui/x-ui db init || yellow "db初始化跳过（Web访问生成）"
 
     # 防火墙放行
     yellow "放行端口54321..."
@@ -72,11 +84,14 @@ main() {
     install_core
     IP=$(curl -s ipinfo.io/ip || hostname -I | awk '{print $1}')
     echo -e "\n${green}安装成功！${yellow}"
-    echo "地址: http://${IP}:54321"
+    echo "地址: http://${IP}:54321/ (默认路径/)"
     echo "用户名/密码: admin/admin (立即修改: x-ui user)"
     echo "端口冲突? x-ui setting 修改端口，然后 x-ui restart"
     echo "菜单: x-ui"
     echo "日志: x-ui log"
+    echo "自定义路径: x-ui 选7 添加 (e.g., /forcoo)"
+    echo "访问提示: 无证书时需SSH隧道 (ssh -L 54321:127.0.0.1:54321 root@${IP}) 或添加域名SSL (x-ui 选18)"
+    echo "警告: IP访问不安全，尽快加SSL"
 }
 
 main "$@"
