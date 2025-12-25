@@ -34,6 +34,29 @@ else
     arch="amd64"
 fi
 
+echo "架构: ${arch}"
+
+# 修复版本号检测逻辑
+os_version=""
+if [[ -f /etc/os-release ]]; then
+    # 提取主版本号，例如 20.04 -> 20
+    os_version=$(awk -F'[= "]+' '/VERSION_ID/{print $2}' /etc/os-release | cut -d'.' -f1)
+fi
+
+if [[ x"${release}" == x"centos" ]]; then
+    if [[ ${os_version} -lt 7 ]]; then
+        echo -e "${red}请使用 CentOS 7 或更高版本的系统！${plain}\n" && exit 1
+    fi
+elif [[ x"${release}" == x"ubuntu" ]]; then
+    if [[ ${os_version} -lt 16 ]]; then
+        echo -e "${red}请使用 Ubuntu 16 或更高版本的系统！${plain}\n" && exit 1
+    fi
+elif [[ x"${release}" == x"debian" ]]; then
+    if [[ ${os_version} -lt 8 ]]; then
+        echo -e "${red}请使用 Debian 8 或更高版本的系统！${plain}\n" && exit 1
+    fi
+fi
+
 install_base() {
     if [[ x"${release}" == x"centos" ]]; then
         yum install epel-release -y
@@ -44,7 +67,6 @@ install_base() {
     fi
 }
 
-# 核心提示函数：提供 SSH 转发教学
 show_install_info() {
     local vps_ip=$(curl -s4m 8 https://api.ipify.org || curl -s4m 8 https://checkip.amazonaws.com)
     local display_ip=""
@@ -71,7 +93,6 @@ show_install_info() {
     echo "------------------------------------------------------"
 }
 
-# 创建全功能管理脚本 /usr/bin/x-ui
 create_shortcut() {
     cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
@@ -140,7 +161,7 @@ config_after_install() {
 }
 
 install_x-ui() {
-    systemctl stop x-ui
+    systemctl stop x-ui 2>/dev/null
     cd /usr/local/
     last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     if [[ -z "$last_version" ]]; then
