@@ -143,7 +143,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -162,7 +162,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/main/install.sh)
     if [[ $? == 0 ]]; then
         LOGI "更新完成，面板已自动重启"
         exit 0
@@ -180,7 +180,7 @@ update_menu() {
         return 0
     fi
     
-    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/yosituta/3x-ui/main/x-ui.sh
+    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/xeefei/x-panel/main/x-ui.sh
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
     
@@ -202,7 +202,7 @@ custom_version() {
         exit 1
     fi
 
-    download_link="https://raw.githubusercontent.com/yosituta/3x-ui/master/install.sh"
+    download_link="https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh"
 
     # Use the entered panel version in the download link
     install_command="bash <(curl -Ls $download_link) v$panel_version"
@@ -236,7 +236,7 @@ uninstall() {
     echo ""
     echo -e "卸载成功\n"
     echo "如果您需要再次安装此面板，可以使用以下命令:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -559,7 +559,7 @@ enable_bbr() {
 }
 
 update_shell() {
-    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/yosituta/3x-ui/raw/main/x-ui.sh
+    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/xeefei/x-panel/raw/main/x-ui.sh
     if [[ $? != 0 ]]; then
         echo ""
         LOGE "下载脚本失败，请检查机器是否可以连接至 GitHub"
@@ -927,108 +927,168 @@ ssl_cert_issue_main() {
     esac 
 } 
 
-ssl_cert_issue() {
-    # 获取当前配置用于最后展示
-    local p_path=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}')
-    local p_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}')
-
-    # 1. 安装 socat
+ssl_cert_issue() { 
+    local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}') 
+    local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}') 
+    # 首先检查 acme.sh
+    if ! command -v ~/.acme.sh/acme.sh &>/dev/null; then 
+        echo "未找到 acme.sh，将进行安装" 
+        install_acme 
+        if [ $? -ne 0 ]; then 
+            LOGE "安装 acme 失败，请检查日志" 
+            exit 1 
+        fi 
+    fi 
+ 
+    # 安装 socat
     case "${release}" in 
-        ubuntu | debian | armbian) 
-            apt update && apt install socat -y 
-            ;; 
-        centos | rhel | almalinux | rocky | ol) 
-            yum -y update && yum -y install socat 
-            ;; 
-        fedora | amzn | virtuozzo) 
-            dnf -y update && dnf -y install socat 
-            ;; 
-        arch | manjaro | parch) 
-            pacman -Sy --noconfirm socat 
-            ;; 
-        *) 
-            echo -e "${red}不支持的操作系统。请检查脚本并手动安装必要的软件包。${plain}\n" 
-            return 1 
-            ;; 
-    esac
-
+    ubuntu | debian | armbian) 
+        apt update && apt install socat -y 
+        ;; 
+    centos | rhel | almalinux | rocky | ol) 
+        yum -y update && yum -y install socat 
+        ;; 
+    fedora | amzn | virtuozzo) 
+        dnf -y update && dnf -y install socat 
+        ;; 
+    arch | manjaro | parch) 
+        pacman -Sy --noconfirm socat 
+        ;; 
+    *) 
+        echo -e "${red}不支持的操作系统。请检查脚本并手动安装必要的软件包。${plain}\n" 
+        exit 1 
+        ;; 
+    esac 
     if [ $? -ne 0 ]; then 
         LOGE "安装 socat 失败，请检查日志"
-        return 1 
-    else 
-        LOGI "安装 socat 成功..." 
-    fi 
-
-    # 2. 获取并检查域名
-    local domain="" 
-    read -rp "请输入您的域名: " domain 
-    if [[ -z "${domain}" ]]; then
-        LOGE "域名不能为空"
-        return 1
-    fi
-    LOGD "您的域名是: ${domain}, 正在检查..." 
-
-    # 3. 检查是否已存在证书 
-    local currentCert=$(~/.acme.sh/acme.sh --list | grep "${domain}" | awk '{print $1}') 
-    if [ "${currentCert}" == "${domain}" ]; then 
-        LOGE "系统已存在此域名的证书。建议使用强制更新功能。" 
-        return 1 
-    fi 
-
-    # 4. 创建证书目录 
-    local certPath="/root/cert/${domain}" 
-    mkdir -p "$certPath" 
-
-    # 5. 获取端口 
-    local WebPort=80 
-    read -rp "请选择要使用的端口 (默认为 80): " WebPort 
-    [[ -z "${WebPort}" ]] && WebPort=80
-    LOGI "将使用端口: ${WebPort} 来签发证书。请确保此端口已开放。" 
-
-    # 6. 签发证书 
-    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt 
-    ~/.acme.sh/acme.sh --issue -d ${domain} --listen-v6 --standalone --httpport ${WebPort} --force 
-    if [ $? -ne 0 ]; then 
-        LOGE "签发证书失败，请检查日志（确保 80 端口未被占用且已解析）。" 
-        return 1 
-    fi 
-
-    # 7. 配置 ReloadCmd
-    local reloadCmd="x-ui restart" 
-    read -rp "您想修改 ACME 的 --reloadcmd 吗? (y/n): " setReloadcmd 
-    if [[ "$setReloadcmd" == "y" || "$setReloadcmd" == "Y" ]]; then 
-        echo -e "\n${green}\t1.${plain} 预设: systemctl reload nginx ; x-ui restart" 
-        echo -e "${green}\t2.${plain} 输入您自己的命令" 
-        read -rp "请选择: " choice 
-        case "$choice" in 
-            1) reloadCmd="systemctl reload nginx ; x-ui restart" ;;
-            2) read -rp "请输入命令: " reloadCmd ;;
-        esac 
-    fi
-
-    # 8. 安装证书并自动绑定面板
-    ~/.acme.sh/acme.sh --installcert -d ${domain} \
+        exit 1 
+     else 
+         LOGI "安装 socat 成功..." 
+     fi 
+ 
+     # 在这里获取域名，我们需要验证它 
+     local domain="" 
+     read -rp "请输入您的域名: " domain 
+     LOGD "您的域名是: ${domain}, 正在检查..." 
+ 
+     # 检查是否已存在证书 
+     local currentCert=$(~/.acme.sh/acme.sh --list | tail -1 | awk '{print $1}') 
+     if [ "${currentCert}" == "${domain}" ]; then 
+         local certInfo=$(~/.acme.sh/acme.sh --list) 
+         LOGE "系统已存在此域名的证书。无法再次签发。当前证书详情:" 
+         LOGI "$certInfo" 
+         exit 1 
+     else 
+         LOGI "您的域名现在可以签发证书了..." 
+     fi 
+ 
+     # 为证书创建一个目录 
+     certPath="/root/cert/${domain}" 
+     if [ ! -d "$certPath" ]; then 
+         mkdir -p "$certPath" 
+     else 
+         rm -rf "$certPath" 
+         mkdir -p "$certPath" 
+     fi 
+ 
+     # 获取独立服务器的端口号 
+     local WebPort=80 
+     read -rp "请选择要使用的端口 (默认为 80): " WebPort 
+     if [[ ${WebPort} -gt 65535 || ${WebPort} -lt 1 ]]; then 
+         LOGE "您输入的 ${WebPort} 无效，将使用默认端口 80。" 
+         WebPort=80 
+     fi 
+     LOGI "将使用端口: ${WebPort} 来签发证书。请确保此端口已开放。" 
+ 
+     # 签发证书 
+     ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt 
+     ~/.acme.sh/acme.sh --issue -d ${domain} --listen-v6 --standalone --httpport ${WebPort} --force 
+     if [ $? -ne 0 ]; then 
+         LOGE "签发证书失败，请检查日志。" 
+         rm -rf ~/.acme.sh/${domain} 
+         exit 1 
+     else 
+         LOGE "签发证书成功，正在安装证书..." 
+     fi 
+ 
+     reloadCmd="x-ui restart" 
+ 
+     LOGI "ACME 的默认 --reloadcmd 是: ${yellow}x-ui restart" 
+     LOGI "此命令将在每次证书签发和续订时运行。" 
+     read -rp "您想修改 ACME 的 --reloadcmd 吗? (y/n): " setReloadcmd 
+     if [[ "$setReloadcmd" == "y" || "$setReloadcmd" == "Y" ]]; then 
+         echo -e "\n${green}\t1.${plain} 预设: systemctl reload nginx ; x-ui restart" 
+         echo -e "${green}\t2.${plain} 输入您自己的命令" 
+         echo -e "${green}\t0.${plain} 保留默认的 reloadcmd" 
+         read -rp "请选择一个选项: " choice 
+         case "$choice" in 
+         1) 
+             LOGI "Reloadcmd 是: systemctl reload nginx ; x-ui restart" 
+             reloadCmd="systemctl reload nginx ; x-ui restart" 
+             ;; 
+         2)  
+             LOGD "建议将 x-ui restart 放在末尾，这样如果其他服务失败，它不会引发错误" 
+             read -rp "请输入您的 reloadcmd (例如: systemctl reload nginx ; x-ui restart): " reloadCmd 
+             LOGI "您的 reloadcmd 是: ${reloadCmd}" 
+             ;; 
+         *) 
+             LOGI "保留默认的 reloadcmd" 
+             ;; 
+         esac 
+     fi
+     
+     # 安装证书
+     ~/.acme.sh/acme.sh --installcert -d ${domain} \
         --key-file /root/cert/${domain}/privkey.pem \
         --fullchain-file /root/cert/${domain}/fullchain.pem \
         --reloadcmd "${reloadCmd}"
-
-    if [ $? -ne 0 ]; then
-        LOGE "安装证书到指定目录失败。"
-        return 1
-    else
-        LOGI "安装证书成功，正在启用自动续订..."
-        ~/.acme.sh/acme.sh --upgrade --auto-upgrade
-        
-        # 核心：自动绑定到面板设置
-        /usr/local/x-ui/x-ui setting -webCert "/root/cert/${domain}/fullchain.pem" -webCertKey "/root/cert/${domain}/privkey.pem" >/dev/null 2>&1
-        systemctl restart x-ui
-        
-        echo -e "——————————————————————"
-        LOGI "证书已安装并自动绑定成功！"
-        LOGI "访问地址: https://${domain}:${p_port}${p_path}"
-        echo -e "——————————————————————"
-    fi
-}
+ 
+     if [ $? -ne 0 ]; then 
+         LOGE "安装证书失败，正在退出。" 
+         rm -rf ~/.acme.sh/${domain} 
+         exit 1 
+     else 
+         LOGI "安装证书成功，正在启用自动续订..." 
+     fi 
+ 
+     # 启用自动续订
+     ~/.acme.sh/acme.sh --upgrade --auto-upgrade 
+     if [ $? -ne 0 ]; then 
+         LOGE "自动续订失败，证书详情：" 
+         ls -lah cert/* 
+         chmod 755 $certPath/* 
+         exit 1 
+     else 
+         LOGI "自动续订成功，证书详情：" 
+         ls -lah cert/* 
+         chmod 755 $certPath/* 
+     fi 
+ 
+     # 成功安装证书后提示用户设置面板路径
+     read -rp "您想为面板设置此证书吗？ (y/n): " setPanel 
+     if [[ "$setPanel" == "y" || "$setPanel" == "Y" ]]; then 
+         local webCertFile="/root/cert/${domain}/fullchain.pem" 
+         local webKeyFile="/root/cert/${domain}/privkey.pem" 
+ 
+         if [[ -f "$webCertFile" && -f "$webKeyFile" ]]; then 
+             /usr/local/x-ui/x-ui cert -webCert "$webCertFile" -webCertKey "$webKeyFile" 
+             LOGI "已为域名设置面板路径: $domain" 
+             echo ""
+             LOGI "  - 证书文件: $webCertFile" 
+             LOGI "  - 私钥文件: $webKeyFile" 
+             echo ""
+             echo -e "${green}登录访问面板URL: https://${domain}:${existing_port}${green}${existing_webBasePath}${plain}" 
+             echo ""
+             echo -e "${green}PS：若您要登录访问面板，请复制上面的地址到浏览器即可${plain}"
+             echo ""
+             restart 
+         else 
+             LOGE "错误：未找到域名的证书或私钥文件: $domain。" 
+         fi 
+     else 
+         LOGI "跳过面板路径设置。" 
+     fi 
+ } 
 ssl_cert_issue_CF() { 
      local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}') 
      local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}') 
@@ -1239,7 +1299,7 @@ fi
 
 # --------- 安装/部署sublink服务 ----------
 
-bash <(curl -Ls https://raw.githubusercontent.com/yosituta/sublink/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/xeefei/sublink/main/install.sh)
 
 
 # --------- 安装 Nginx ----------
@@ -1719,11 +1779,26 @@ show_menu() {
   ${green}24.${plain} Speedtest by Ookla
   ${green}25.${plain} 安装订阅转换 
 ——————————————————————
+  ${green}若在使用过程中有任何问题${plain}
+  ${yellow}请加入〔X-Panel面板〕交流群${plain}
+  ${red}https://t.me/XUI_CN ${yellow}截图进行反馈${plain}
   ${green}〔X-Panel面板〕项目地址${plain}
-  ${yellow}https://github.com/yosituta/3x-ui${plain}
+  ${yellow}https://github.com/xeefei/x-panel${plain}
+  ${green}详细〔安装配置〕教程${plain}
+  ${yellow}https://xeefei.blogspot.com/2025/09/x-panel.html${plain}
 ——————————————————————
 
+-------------->>>>>>>赞 助 推 广 区<<<<<<<<-------------------
 
+${green}1、搬瓦工GIA高端线路：${yellow}https://bandwagonhost.com/aff.php?aff=75015${plain}
+
+${green}2、Dmit高端GIA线路：${yellow}https://www.dmit.io/aff.php?aff=9326${plain}
+
+${green}3、白丝云〔4837线路〕实惠量大管饱：${yellow}https://cloudsilk.io/aff.php?aff=706${plain}
+
+${green}4、RackNerd性价比机器：${yellow}https://my.racknerd.com/aff.php?aff=15268&pid=912${plain}
+
+----------------------------------------------
 "
     show_status
     echo && read -p "请输入选项 [0-25]: " num
