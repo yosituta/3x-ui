@@ -1,136 +1,120 @@
 #!/bin/bash
 
-# ==========================================================
-# 3x-UI 旧免费版本一键安装脚本 (yosituta/3x-ui main, amd64 only)
-# 使用: wget https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh && bash install.sh
-# ==========================================================
-
 red='\033[0;31m'
 green='\033[0;32m'
-blue='\033[0;34m'
 yellow='\033[0;33m'
+cyan='\033[0;36m'
 plain='\033[0m'
 
 # check root
-[[ $EUID -ne 0 ]] && echo -e "${red}Please run as root (sudo bash install.sh)${plain}\n" && exit 1
+[[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
-# ----------------------------------------------------------
-# OS 和架构检查 (仅 amd64)
-# ----------------------------------------------------------
-if [[ -f /etc/os-release ]]; then
-    source /etc/os-release
-    release=$ID
-else
-    echo -e "${red}Unsupported OS${plain}" && exit 1
-fi
-
-arch() {
-    case "$(uname -m)" in
-        x86_64 | amd64 ) echo 'amd64' ;;
-        * ) echo -e "${red}Only Linux amd64 supported!${plain}" && exit 1 ;;
-    esac
-}
-
-if [[ $(arch) != "amd64" ]]; then
-    echo -e "${red}Error: This version only supports amd64. Use x86_64 server.${plain}"
-    exit 1
-fi
-
-os_version=$(grep -i version_id /etc/os-release | cut -d '"' -f2 | cut -d . -f1)
-if [[ "${release}" == "ubuntu" && ${os_version} -lt 20 ]] || [[ "${release}" == "debian" && ${os_version} -lt 11 ]] || [[ "${release}" == "centos" && ${os_version} -lt 8 ]]; then
-    echo -e "${red}OS version too low, please upgrade.${plain}" && exit 1
-fi
-
-# ----------------------------------------------------------
-# 安装基础依赖
-# ----------------------------------------------------------
 install_base() {
-    case "${release}" in
-        ubuntu | debian)
-            apt-get update && apt-get install -y wget curl tar tzdata unzip
-            ;;
-        centos | rhel)
-            yum update -y && yum install -y wget curl tar tzdata unzip
-            ;;
-        *)
-            echo -e "${red}Unsupported OS: $release${plain}" && exit 1
-            ;;
-    esac
+    apt update -y && apt install wget curl tar cron socat net-tools -y || yum install wget curl tar cron socat net-tools -y
 }
 
-# ----------------------------------------------------------
-# 生成随机凭证
-# ----------------------------------------------------------
-gen_random_string() {
-    LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w "${1:-16}" | head -n 1
+# 核心修复：强制链接你项目压缩包里的彩色 x-ui.sh 脚本
+create_shortcut() {
+    # 1. 彻底删除可能存在的任何冲突
+    rm -f /usr/bin/x-ui
+    
+    # 2. 检查压缩包里解压出来的 x-ui.sh 是否存在
+    if [[ -f "/usr/local/x-ui/x-ui.sh" ]]; then
+        chmod +x /usr/local/x-ui/x-ui.sh
+        # 强制创建软链接，让 x-ui 命令直接运行这个彩色脚本
+        ln -sf /usr/local/x-ui/x-ui.sh /usr/bin/x-ui
+        echo -e "${green}已成功链接管理脚本到 /usr/bin/x-ui${plain}"
+    else
+        # 兜底：如果文件不存在，创建一个跳转脚本
+        cat > /usr/bin/x-ui <<EOF
+#!/bin/bash
+/usr/local/x-ui/x-ui "\$@"
+EOF
+        chmod +x /usr/bin/x-ui
+    fi
 }
 
-# ----------------------------------------------------------
-# 安装逻辑 (优化: 临时二进制名, WorkingDirectory, unzip 支持)
-# ----------------------------------------------------------
-install_3xui() {
-    echo -e "${green}Installing 3x-UI Old Free Version (amd64 only, no updates)${plain}"
-    repo_url="https://raw.githubusercontent.com/yosituta/3x-ui/main"
-
-    install_base
-
-    cd /usr/local/
-    # 停止并移除旧版
-    systemctl stop x-ui 2>/dev/null || true
-    rm -rf x-ui
-
-    # 下载文件 (临时名避免覆盖目录)
-    echo -e "${green}Downloading components...${plain}"
-    wget -N --no-check-certificate "${repo_url}/x-ui.sh" -O /usr/bin/x-ui && chmod +x /usr/bin/x-ui
-    wget -N --no-check-certificate "${repo_url}/x-ui" -O x-ui-binary && chmod +x x-ui-binary
-    wget -N --no-check-certificate "${repo_url}/x-ui.service" -O x-ui.service
-
-    # 创建目录并移动二进制
-    mkdir -p x-ui/bin
-    mv x-ui-binary x-ui/x-ui
-    cd x-ui
-
-    # 下载 bin 文件 (Xray 等)
-    wget -N --no-check-certificate "${repo_url}/bin/xray-linux-amd64" -O bin/xray-linux-amd64 && chmod +x bin/xray-linux-amd64
-    wget -N --no-check-certificate "${repo_url}/bin/geoip.dat" -O bin/geoip.dat || true
-    wget -N --no-check-certificate "${repo_url}/bin/geosite.dat" -O bin/geosite.dat || true
-
-    # systemd 服务 (内置 WorkingDirectory 修复 Xray 路径)
-    cp ../x-ui.service /etc/systemd/system/
-    cat > /etc/systemd/system/x-ui.service << 'SERVICE_EOF'
-[Unit]
-Description=3x-UI
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/usr/local/x-ui
-ExecStart=/usr/local/x-ui/x-ui
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-SERVICE_EOF
-
-    systemctl daemon-reload
-    systemctl enable x-ui
-    systemctl start x-ui
-
-    # 设置随机凭证
-    username=$(gen_random_string 8)
-    password=$(gen_random_string 12)
-    ./x-ui setting -username "${username}" -password "${password}" -port 54321
-
-    echo -e "${green}Installation complete!${plain}"
-    echo -e "Panel URL: http://$(curl -4 -s ifconfig.me):54321 (IPv4 preferred, use SSH tunnel for localhost)"
-    echo -e "Username: ${username}"
-    echo -e "Password: ${password}"
-    echo -e "${yellow}Change credentials immediately! Command: x-ui setting${plain}"
-    echo -e "${blue}Management: x-ui start/stop/restart/status${plain}"
-    echo -e "${yellow}For public access, set SSL cert or use SSH tunnel.${plain}"
+show_install_info() {
+    local vps_ip=$(curl -s4m 8 https://api.ipify.org || curl -s6m 8 https://api64.ipify.org)
+    [[ "$vps_ip" == *":"* ]] && vps_ip="[$vps_ip]"
+    local local_port=$((RANDOM % 30000 + 20000))
+    local panel_port=${config_port:-54321}
+    local safe_path=${config_base_path}
+    
+    echo -e "\n${green}3x-ui 面板安装成功！${plain}"
+    echo -e "------------------------------------------------------"
+    echo -e "SSH 隧道安全登录 (推荐):"
+    echo -e "${yellow}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
+    echo -e "登录后浏览器访问: ${green}http://127.0.0.1:${local_port}${safe_path}${plain}"
+    echo -e "------------------------------------------------------"
+    echo -e "${cyan}【域名访问与 HTTPS 配置】${plain}"
+    echo -e "如果您想使用域名直接访问，请按照以下步骤操作："
+    echo -e "1. 在终端输入: ${green}x-ui${plain}"
+    echo -e "2. 输入数字: ${yellow}18${plain} (SSL 证书管理)"
+    echo -e "3. 选择数字: ${yellow}1${plain} (申请证书并自动绑定)"
+    echo -e "完成后，您即可通过 https://您的域名:${panel_port}${safe_path} 访问。"
+    echo -e "------------------------------------------------------"
 }
 
-# 运行
-install_3xui
+install_x-ui() {
+    systemctl stop x-ui 2>/dev/null
+    arch=$(arch)
+    if [[ $arch == "x86_64" || $arch == "amd64" ]]; then
+        arch="amd64"
+    elif [[ $arch == "aarch64" || $arch == "arm64" ]]; then
+        arch="arm64"
+    else
+        arch="amd64"
+        echo -e "${red}检测到未知的架构，尝试使用 amd64${plain}"
+    fi
+    
+    # 从你的项目仓库检测最新版本
+    last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    
+    if [[ ! -n "$last_version" ]]; then
+        echo -e "${red}检测版本失败，请检查网络或仓库 Release 状态${plain}"
+        exit 1
+    fi
+
+    echo -e "正在从您的仓库下载最新版本: ${last_version}"
+    wget -N "https://github.com/yosituta/3x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz"
+    
+    if [[ $? -ne 0 ]]; then
+        echo -e "${red}下载失败，请确保 Release 中存在 x-ui-linux-${arch}.tar.gz 文件${plain}"
+        exit 1
+    fi
+
+    rm -rf /usr/local/x-ui/
+    tar zxvf x-ui-linux-${arch}.tar.gz -C /usr/local/
+    rm x-ui-linux-${arch}.tar.gz -f
+    
+    cd /usr/local/x-ui/
+    chmod +x x-ui bin/xray-linux-${arch}
+    [[ -f "x-ui.sh" ]] && chmod +x x-ui.sh
+    
+    cp -f x-ui.service /etc/systemd/system/
+    systemctl daemon-reload && systemctl enable x-ui && systemctl start x-ui
+    
+    echo -e "\n${yellow}请设置面板初始化参数：${plain}"
+    read -p "设置账户 (默认 admin): " config_account
+    [[ -z "$config_account" ]] && config_account="admin"
+    read -p "设置密码 (默认 admin): " config_password
+    [[ -z "$config_password" ]] && config_password="admin"
+    read -p "设置端口 (默认 54321): " config_port
+    [[ -z "$config_port" ]] && config_port="54321"
+    read -p "设置路径 (默认 /): " config_base_path
+    [[ -z "$config_base_path" ]] && config_base_path="/"
+    
+    [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
+    [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
+
+    # 写入设置
+    /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
+    systemctl restart x-ui
+
+    create_shortcut
+    show_install_info
+}
+
+install_base
+install_x-ui
