@@ -3,7 +3,8 @@
 一键安装自定义X-Panel面板，支持IP直连访问（测试用，建议加SSL）。
 
 ## 安装命令
-curl -L https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh -o install.sh && chmod +x install.sh && bash install.sh
+## curl -L https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh -o install.sh && chmod +x install.sh && bash install.sh
+curl -L https://raw.githubusercontent.com/yosituta/3x-ui/main/install-xui.sh | bash
 
 ## 访问
 http://你的IP:54321/（默认路径/，或自定义）
