@@ -9,7 +9,37 @@ plain='\033[0m'
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
 install_base() {
-    apt update -y && apt install wget curl tar cron socat net-tools -y || yum install wget curl tar cron socat net-tools -y
+    # 更新源并安装基本依赖（兼容 Debian/Ubuntu 和 CentOS/RHEL）
+    if command -v apt >/dev/null 2>&1; then
+        apt update -y && apt install -y wget curl tar cron socat net-tools
+    elif command -v yum >/dev/null 2>&1; then
+        yum install -y wget curl tar cron socat net-tools
+    else
+        echo -e "${red}不支持的系统包管理器，请手动安装 wget curl tar cron socat net-tools${plain}"
+        exit 1
+    fi
+
+    # 预装 acme.sh（用于后续 SSL 证书申请）
+    echo -e "${yellow}正在预装 acme.sh（用于申请 SSL 证书），请稍等...${plain}"
+    if [ -f "$HOME/.acme.sh/acme.sh" ]; then
+        echo -e "${green}acme.sh 已存在，跳过安装${plain}"
+    else
+        # 主方式 + 备用方式 + 错误处理
+        if curl https://get.acme.sh | sh; then
+            echo -e "${green}acme.sh 主方式安装成功${plain}"
+        elif wget -O - https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh; then
+            echo -e "${green}acme.sh 备用方式安装成功${plain}"
+        else
+            echo -e "${red}acme.sh 安装失败！后续申请证书可能需要手动安装${plain}"
+            echo -e "${yellow}手动安装命令：curl https://get.acme.sh | sh${plain}"
+            echo -e "${yellow}或：wget -O - https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh${plain}"
+            # 不退出安装，继续完成面板安装
+        fi
+    fi
+
+    # 确保环境变量生效（兼容 root 和普通用户）
+    [ -f "$HOME/.bashrc" ] && source "$HOME/.bashrc"
+    [ -f "/root/.bashrc" ] && source "/root/.bashrc"
 }
 
 # 从仓库下载彩色管理脚本并创建快捷方式
