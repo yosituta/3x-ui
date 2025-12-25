@@ -12,27 +12,34 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat net-tools -y
 }
 
-# 核心修复：直接链接原厂最全的脚本
+# 核心：硬写入 3x-ui 官方原版管理脚本
 create_shortcut() {
-    # 强制删除旧的
-    rm -f /usr/bin/x-ui
-    
-    # 3x-ui 官方包内包含一个全功能的交互式脚本
-    # 我们将其作为主命令，这会包含你想要的所有原厂菜单功能
-    if [[ -f "/usr/local/x-ui/x-ui.sh" ]]; then
-        ln -sf /usr/local/x-ui/x-ui.sh /usr/bin/x-ui
-        chmod +x /usr/bin/x-ui
-    else
-        # 兜底方案：如果官方没带，我们手动构建一个能完美转发所有命令的入口
-        cat > /usr/bin/x-ui <<EOF
+    cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
+
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
+
+# 这里调用二进制程序，原厂二进制在处理 status/start 时会报错
+# 我们通过脚本逻辑转发给系统服务
 case "\$1" in
-    start|stop|restart|status|enable|disable) systemctl \$1 x-ui ;;
-    *) /usr/local/x-ui/x-ui "\$@" ;;
+    start) systemctl start x-ui ;;
+    stop) systemctl stop x-ui ;;
+    restart) systemctl restart x-ui ;;
+    status) systemctl status x-ui ;;
+    enable) systemctl enable x-ui ;;
+    disable) systemctl disable x-ui ;;
+    log) journalctl -u x-ui -e ;;
+    v2-ui) /usr/local/x-ui/x-ui v2-ui ;;
+    *) 
+        # 如果没有参数，直接调用原厂二进制的交互模式 (main 模式)
+        /usr/local/x-ui/x-ui main "\$@" 
+        ;;
 esac
 EOF
-        chmod +x /usr/bin/x-ui
-    fi
+    chmod +x /usr/bin/x-ui
 }
 
 show_install_info() {
@@ -65,7 +72,7 @@ install_x-ui() {
     cp -f x-ui.service /etc/systemd/system/
     systemctl daemon-reload && systemctl enable x-ui && systemctl start x-ui
     
-    # 交互设置
+    echo -e "${yellow}设置面板参数：${plain}"
     read -p "账户 (默认 admin): " config_account
     [[ -z "$config_account" ]] && config_account="admin"
     read -p "密码 (默认 admin): " config_password
@@ -78,6 +85,7 @@ install_x-ui() {
     [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
     [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
 
+    # 初始化配置
     /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
     systemctl restart x-ui
 
