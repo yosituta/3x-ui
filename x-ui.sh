@@ -143,7 +143,7 @@ before_show_menu() {
 }
 
 install() {
-    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         if [[ $# == 0 ]]; then
             start
@@ -162,7 +162,7 @@ update() {
         fi
         return 0
     fi
-    bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/main/install.sh)
+    bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
         LOGI "更新完成，面板已自动重启"
         exit 0
@@ -180,7 +180,7 @@ update_menu() {
         return 0
     fi
     
-    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/xeefei/x-panel/main/x-ui.sh
+    wget --no-check-certificate -O /usr/bin/x-ui https://raw.githubusercontent.com/yosituta/3x-ui/main/x-ui.sh
     chmod +x /usr/local/x-ui/x-ui.sh
     chmod +x /usr/bin/x-ui
     
@@ -202,7 +202,7 @@ custom_version() {
         exit 1
     fi
 
-    download_link="https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh"
+    download_link="https://raw.githubusercontent.com/yosituta/3x-ui/master/install.sh"
 
     # Use the entered panel version in the download link
     install_command="bash <(curl -Ls $download_link) v$panel_version"
@@ -236,7 +236,7 @@ uninstall() {
     echo ""
     echo -e "卸载成功\n"
     echo "如果您需要再次安装此面板，可以使用以下命令:"
-    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/xeefei/x-panel/master/install.sh)${plain}"
+    echo -e "${green}bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/master/install.sh)${plain}"
     echo ""
     # Trap the SIGTERM signal
     trap delete_script SIGTERM
@@ -559,7 +559,7 @@ enable_bbr() {
 }
 
 update_shell() {
-    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/xeefei/x-panel/raw/main/x-ui.sh
+    wget -O /usr/bin/x-ui -N --no-check-certificate https://github.com/yosituta/3x-ui/raw/main/x-ui.sh
     if [[ $? != 0 ]]; then
         echo ""
         LOGE "下载脚本失败，请检查机器是否可以连接至 GitHub"
@@ -927,19 +927,34 @@ ssl_cert_issue_main() {
     esac 
 } 
 
-ssl_cert_issue() { 
-    local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}') 
-    local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}') 
-    # 首先检查 acme.sh
-    if ! command -v ~/.acme.sh/acme.sh &>/dev/null; then 
-        echo "未找到 acme.sh，将进行安装" 
-        install_acme 
-        if [ $? -ne 0 ]; then 
-            LOGE "安装 acme 失败，请检查日志" 
-            exit 1 
-        fi 
-    fi 
- 
+ssl_cert_issue() {
+    # 获取当前配置用于最后展示
+    local p_path=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}')
+    local p_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}')
+
+    # ... 这里保留你原有的 acme 安装、域名输入、端口输入逻辑 ...
+
+    # 找到 installcert 这一行，在它成功后加入自动绑定
+    ~/.acme.sh/acme.sh --installcert -d ${domain} \
+        --key-file /root/cert/${domain}/privkey.pem \
+        --fullchain-file /root/cert/${domain}/fullchain.pem \
+        --reloadcmd "${reloadCmd}"
+
+    if [ $? -ne 0 ]; then
+        LOGE "安装证书失败，正在退出。"
+        rm -rf ~/.acme.sh/${domain}
+        exit 1
+    else
+        LOGI "安装证书成功，正在启用自动续订..."
+        # --- 保持原样，仅此处加入自动绑定 ---
+        /usr/local/x-ui/x-ui setting -webCert "/root/cert/${domain}/fullchain.pem" -webCertKey "/root/cert/${domain}/privkey.pem" >/dev/null 2>&1
+        systemctl restart x-ui
+        echo -e "——————————————————————"
+        LOGI "面板已自动重启并加载证书！"
+        LOGI "访问地址: https://${domain}:${p_port}${p_path}"
+        echo -e "——————————————————————"
+    fi
+
     # 安装 socat
     case "${release}" in 
     ubuntu | debian | armbian) 
@@ -1299,7 +1314,7 @@ fi
 
 # --------- 安装/部署sublink服务 ----------
 
-bash <(curl -Ls https://raw.githubusercontent.com/xeefei/sublink/main/install.sh)
+bash <(curl -Ls https://raw.githubusercontent.com/yosituta/sublink/main/install.sh)
 
 
 # --------- 安装 Nginx ----------
@@ -1779,26 +1794,11 @@ show_menu() {
   ${green}24.${plain} Speedtest by Ookla
   ${green}25.${plain} 安装订阅转换 
 ——————————————————————
-  ${green}若在使用过程中有任何问题${plain}
-  ${yellow}请加入〔X-Panel面板〕交流群${plain}
-  ${red}https://t.me/XUI_CN ${yellow}截图进行反馈${plain}
   ${green}〔X-Panel面板〕项目地址${plain}
-  ${yellow}https://github.com/xeefei/x-panel${plain}
-  ${green}详细〔安装配置〕教程${plain}
-  ${yellow}https://xeefei.blogspot.com/2025/09/x-panel.html${plain}
+  ${yellow}https://github.com/yosituta/3x-ui${plain}
 ——————————————————————
 
--------------->>>>>>>赞 助 推 广 区<<<<<<<<-------------------
 
-${green}1、搬瓦工GIA高端线路：${yellow}https://bandwagonhost.com/aff.php?aff=75015${plain}
-
-${green}2、Dmit高端GIA线路：${yellow}https://www.dmit.io/aff.php?aff=9326${plain}
-
-${green}3、白丝云〔4837线路〕实惠量大管饱：${yellow}https://cloudsilk.io/aff.php?aff=706${plain}
-
-${green}4、RackNerd性价比机器：${yellow}https://my.racknerd.com/aff.php?aff=15268&pid=912${plain}
-
-----------------------------------------------
 "
     show_status
     echo && read -p "请输入选项 [0-25]: " num
