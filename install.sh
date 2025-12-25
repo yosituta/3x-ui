@@ -47,10 +47,10 @@ fi
 install_base() {
     case "${release}" in
         ubuntu | debian)
-            apt-get update && apt-get install -y wget curl tar tzdata
+            apt-get update && apt-get install -y wget curl tar tzdata unzip
             ;;
         centos | rhel)
-            yum update -y && yum install -y wget curl tar tzdata
+            yum update -y && yum install -y wget curl tar tzdata unzip
             ;;
         *)
             echo -e "${red}Unsupported OS: $release${plain}" && exit 1
@@ -66,7 +66,7 @@ gen_random_string() {
 }
 
 # ----------------------------------------------------------
-# 安装逻辑 (修复: 用临时名下载二进制, 正确创建目录)
+# 安装逻辑 (优化: 临时二进制名, WorkingDirectory, unzip 支持)
 # ----------------------------------------------------------
 install_3xui() {
     echo -e "${green}Installing 3x-UI Old Free Version (amd64 only, no updates)${plain}"
@@ -79,7 +79,7 @@ install_3xui() {
     systemctl stop x-ui 2>/dev/null || true
     rm -rf x-ui
 
-    # 下载文件 (修复: 二进制用临时名, 避免覆盖目录)
+    # 下载文件 (临时名避免覆盖目录)
     echo -e "${green}Downloading components...${plain}"
     wget -N --no-check-certificate "${repo_url}/x-ui.sh" -O /usr/bin/x-ui && chmod +x /usr/bin/x-ui
     wget -N --no-check-certificate "${repo_url}/x-ui" -O x-ui-binary && chmod +x x-ui-binary
@@ -90,22 +90,26 @@ install_3xui() {
     mv x-ui-binary x-ui/x-ui
     cd x-ui
 
-    # 下载 bin 文件
+    # 下载 bin 文件 (Xray 等)
     wget -N --no-check-certificate "${repo_url}/bin/xray-linux-amd64" -O bin/xray-linux-amd64 && chmod +x bin/xray-linux-amd64
     wget -N --no-check-certificate "${repo_url}/bin/geoip.dat" -O bin/geoip.dat || true
     wget -N --no-check-certificate "${repo_url}/bin/geosite.dat" -O bin/geosite.dat || true
 
-    # systemd 服务 (修复: 单引号 heredoc 避免扩展)
+    # systemd 服务 (内置 WorkingDirectory 修复 Xray 路径)
     cp ../x-ui.service /etc/systemd/system/
     cat > /etc/systemd/system/x-ui.service << 'SERVICE_EOF'
 [Unit]
 Description=3x-UI
 After=network.target
+
 [Service]
 Type=simple
 User=root
+WorkingDirectory=/usr/local/x-ui
 ExecStart=/usr/local/x-ui/x-ui
 Restart=on-failure
+RestartSec=5s
+
 [Install]
 WantedBy=multi-user.target
 SERVICE_EOF
@@ -120,11 +124,12 @@ SERVICE_EOF
     ./x-ui setting -username "${username}" -password "${password}" -port 54321
 
     echo -e "${green}Installation complete!${plain}"
-    echo -e "Panel URL: http://$(curl -s ifconfig.me):54321"
+    echo -e "Panel URL: http://$(curl -4 -s ifconfig.me):54321 (IPv4 preferred, use SSH tunnel for localhost)"
     echo -e "Username: ${username}"
     echo -e "Password: ${password}"
     echo -e "${yellow}Change credentials immediately! Command: x-ui setting${plain}"
     echo -e "${blue}Management: x-ui start/stop/restart/status${plain}"
+    echo -e "${yellow}For public access, set SSL cert or use SSH tunnel.${plain}"
 }
 
 # 运行
