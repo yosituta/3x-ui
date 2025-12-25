@@ -85,7 +85,7 @@ main() {
     echo "端口冲突? x-ui setting 修改端口，然后 x-ui restart"
     echo "菜单: x-ui"
     echo "日志: x-ui log"
-    echo "自定义路径: x-ui 选7 添加 (e.g., /forcoo)"
+    echo "自定义路径: x-ui 选7 添加 (e.g., /lujin)"
     echo "访问提示: 无证书时需SSH隧道 (ssh -L 54321:127.0.0.1:54321 root@${IP}) 或添加域名SSL (x-ui 选18)"
     echo "警告: IP访问不安全，尽快加SSL"
 }
