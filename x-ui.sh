@@ -946,6 +946,7 @@ ssl_cert_issue() {
         exit 1
     else
         LOGI "安装证书成功，正在启用自动续订..."
+        /usr/local/x-ui/x-ui setting -webCert "/root/cert/${domain}/fullchain.pem" -webCertKey "/root/cert/${domain}/privkey.pem"
         # --- 保持原样，仅此处加入自动绑定 ---
         /usr/local/x-ui/x-ui setting -webCert "/root/cert/${domain}/fullchain.pem" -webCertKey "/root/cert/${domain}/privkey.pem" >/dev/null 2>&1
         systemctl restart x-ui
