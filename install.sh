@@ -12,21 +12,18 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat net-tools -y
 }
 
-# 核心修复：这个脚本不再自作聪明写菜单，而是完全调用原厂
+# 终极修复：绝对不再创建自定义菜单，直接链接原厂程序
 create_shortcut() {
     rm -f /usr/bin/x-ui
+    # 创建一个极简转发脚本，如果是 status 就走系统，其他全部走原厂二进制
     cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
-case "\$1" in
-    status) systemctl status x-ui ;;
-    start) systemctl start x-ui ;;
-    stop) systemctl stop x-ui ;;
-    restart) systemctl restart x-ui ;;
-    enable) systemctl enable x-ui ;;
-    disable) systemctl disable x-ui ;;
-    log) journalctl -u x-ui -e ;;
-    *) /usr/local/x-ui/x-ui "\$@" ;;
-esac
+if [[ "\$1" == "status" ]]; then
+    systemctl status x-ui
+else
+    # 执行原厂二进制，不带参数时它会自动弹出原厂菜单
+    /usr/local/x-ui/x-ui "\$@"
+fi
 EOF
     chmod +x /usr/bin/x-ui
 }
