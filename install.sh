@@ -12,7 +12,7 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat -y
 }
 
-# 还原原厂风格菜单并修复快捷键
+# 还原原厂风格菜单
 create_shortcut() {
     rm -f /usr/bin/x-ui
     cat > /usr/bin/x-ui <<EOF
@@ -53,20 +53,23 @@ EOF
 }
 
 show_install_info() {
-    # 智能获取 IP：IPv4 优先，无则 IPv6
     local vps_ip=$(curl -s4m 8 https://api.ipify.org || curl -s6m 8 https://api64.ipify.org)
-    [[ "$vps_ip" == *":"* ]] && vps_ip="[$vps_ip]" # 格式化 IPv6
+    [[ "$vps_ip" == *":"* ]] && vps_ip="[$vps_ip]"
     
     local local_port=$((RANDOM % 40000 + 20000))
     local panel_port=${config_port:-54321}
-    local display_path=${config_base_path:-"/"}
+    
+    # 核心修复：确保路径以 / 开头
+    local safe_path=${config_base_path}
+    [[ "${safe_path:0:1}" != "/" ]] && safe_path="/${safe_path}"
 
     echo -e "\n${green}面板安装成功！${plain}"
     echo -e "------------------------------------------------------"
     echo -e "请在本地电脑执行此命令（按回车确认）:"
     echo -e "${yellow}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
     echo -e "------------------------------------------------------"
-    echo -e "登录地址: ${green}http://127.0.0.1:${local_port}${display_path}${plain}"
+    # 核心修复：端口后强制加 / 再拼接路径（处理双斜杠重叠）
+    echo -e "登录地址: ${green}http://127.0.0.1:${local_port}${safe_path}${plain}" | sed 's/\/\//\//g' | sed 's/127.0.0.1:/127.0.0.1:\//' | sed 's/:\/\//:/'
     echo -e "用户名: ${green}${config_account}${plain} | 密码: ${green}${config_password}${plain}"
     echo -e "------------------------------------------------------"
 }
@@ -87,18 +90,25 @@ install_x-ui() {
     cp -f x-ui.service /etc/systemd/system/
     systemctl daemon-reload && systemctl enable x-ui && systemctl start x-ui
     
-    # 引导设置
     echo -e "${yellow}设置面板参数：${plain}"
     read -p "账户 (默认 admin): " config_account
     [[ -z "$config_account" ]] && config_account="admin"
+    
     read -p "密码 (默认 admin): " config_password
     [[ -z "$config_password" ]] && config_password="admin"
-    read -p "端口 (默认 2025): " config_port
-    [[ -z "$config_port" ]] && config_port="2025"
-    read -p "路径 (须以/开头并结尾，例如 /forcoo/): " config_base_path
+    
+    # 修改 1: 默认端口显示改为 54321
+    read -p "端口 (默认 54321): " config_port
+    [[ -z "$config_port" ]] && config_port="54321"
+    
+    # 修改 2: 默认路径示例改为 /x-ui/
+    read -p "路径 (须以/开头并结尾，例如 /x-ui/): " config_base_path
     [[ -z "$config_base_path" ]] && config_base_path="/"
+    
+    # 修改 3: 路径自动纠错，补全斜杠
+    [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
+    [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
 
-    # 执行设置
     /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
     systemctl restart x-ui
 
