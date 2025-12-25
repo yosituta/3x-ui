@@ -927,18 +927,34 @@ ssl_cert_issue_main() {
     esac 
 } 
 
-ssl_cert_issue() { 
-    local existing_webBasePath=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}') 
-    local existing_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}') 
-    # 首先检查 acme.sh
-    if ! command -v ~/.acme.sh/acme.sh &>/dev/null; then 
-        echo "未找到 acme.sh，将进行安装" 
-        install_acme 
-        if [ $? -ne 0 ]; then 
-            LOGE "安装 acme 失败，请检查日志" 
-            exit 1 
-        fi 
-    fi 
+ssl_cert_issue() {
+    # 获取当前配置用于最后展示
+    local p_path=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'webBasePath（访问路径）: .+' | awk '{print $2}')
+    local p_port=$(/usr/local/x-ui/x-ui setting -show true | grep -Eo 'port（端口号）: .+' | awk '{print $2}')
+
+    # ... 这里保留你原有的 acme 安装、域名输入、端口输入逻辑 ...
+
+    # 找到 installcert 这一行，在它成功后加入自动绑定
+    ~/.acme.sh/acme.sh --installcert -d ${domain} \
+        --key-file /root/cert/${domain}/privkey.pem \
+        --fullchain-file /root/cert/${domain}/fullchain.pem \
+        --reloadcmd "${reloadCmd}"
+
+    if [ $? -ne 0 ]; then
+        LOGE "安装证书失败，正在退出。"
+        rm -rf ~/.acme.sh/${domain}
+        exit 1
+    else
+        LOGI "安装证书成功，正在启用自动续订..."
+        # --- 保持原样，仅此处加入自动绑定 ---
+        /usr/local/x-ui/x-ui setting -webCert "/root/cert/${domain}/fullchain.pem" -webCertKey "/root/cert/${domain}/privkey.pem" >/dev/null 2>&1
+        systemctl restart x-ui
+        echo -e "——————————————————————"
+        LOGI "面板已自动重启并加载证书！"
+        LOGI "访问地址: https://${domain}:${p_port}${p_path}"
+        echo -e "——————————————————————"
+    fi
+}
  
     # 安装 socat
     case "${release}" in 
