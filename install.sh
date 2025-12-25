@@ -12,7 +12,7 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat -y
 }
 
-# 还原原厂风格菜单
+# 彻底修复：让 x-ui status 完美显示状态
 create_shortcut() {
     rm -f /usr/bin/x-ui
     cat > /usr/bin/x-ui <<EOF
@@ -47,7 +47,19 @@ show_menu() {
     esac
 }
 
-[[ \$# -gt 0 ]] && /usr/local/x-ui/x-ui "\$@" || show_menu
+# 关键修复逻辑：识别 status 命令并转给 systemctl
+if [[ \$# -gt 0 ]]; then
+    case "\$1" in
+        status) systemctl status x-ui ;;
+        start) systemctl start x-ui ;;
+        stop) systemctl stop x-ui ;;
+        restart) systemctl restart x-ui ;;
+        reload) systemctl reload x-ui ;;
+        *) /usr/local/x-ui/x-ui "\$@" ;;
+    esac
+else
+    show_menu
+fi
 EOF
     chmod +x /usr/bin/x-ui
 }
@@ -59,7 +71,6 @@ show_install_info() {
     local local_port=$((RANDOM % 40000 + 20000))
     local panel_port=${config_port:-54321}
     
-    # 核心修复：确保路径以 / 开头
     local safe_path=${config_base_path}
     [[ "${safe_path:0:1}" != "/" ]] && safe_path="/${safe_path}"
 
@@ -68,8 +79,10 @@ show_install_info() {
     echo -e "请在本地电脑执行此命令（按回车确认）:"
     echo -e "${yellow}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
     echo -e "------------------------------------------------------"
-    # 核心修复：端口后强制加 / 再拼接路径（处理双斜杠重叠）
-    echo -e "登录地址: ${green}http://127.0.0.1:${local_port}${safe_path}${plain}" | sed 's/\/\//\//g' | sed 's/127.0.0.1:/127.0.0.1:\//' | sed 's/:\/\//:/'
+    
+    # 路径拼接显示修复
+    local final_link="http://127.0.0.1:${local_port}${safe_path}"
+    echo -e "登录地址: ${green}${final_link}${plain}"
     echo -e "用户名: ${green}${config_account}${plain} | 密码: ${green}${config_password}${plain}"
     echo -e "------------------------------------------------------"
 }
@@ -93,19 +106,14 @@ install_x-ui() {
     echo -e "${yellow}设置面板参数：${plain}"
     read -p "账户 (默认 admin): " config_account
     [[ -z "$config_account" ]] && config_account="admin"
-    
     read -p "密码 (默认 admin): " config_password
     [[ -z "$config_password" ]] && config_password="admin"
-    
-    # 修改 1: 默认端口显示改为 54321
     read -p "端口 (默认 54321): " config_port
     [[ -z "$config_port" ]] && config_port="54321"
-    
-    # 修改 2: 默认路径示例改为 /x-ui/
-    read -p "路径 (须以/开头并结尾，例如 /x-ui/): " config_base_path
+    read -p "路径 (例如 /x-ui/): " config_base_path
     [[ -z "$config_base_path" ]] && config_base_path="/"
     
-    # 修改 3: 路径自动纠错，补全斜杠
+    # 路径自动补全
     [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
     [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
 
