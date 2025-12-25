@@ -38,7 +38,7 @@ echo -e "——————————————————————"
 echo -e "当前服务器的操作系统为:${red} $release${plain}"
 echo ""
 xui_version=$(/usr/local/x-ui/x-ui -v)
-last_version=$(curl -Ls "https://api.github.com/repos/xeefei/x-panel/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
 echo -e "${green}当前代理面板的版本为: ${red}〔X-Panel面板〕v${xui_version}${plain}"
 echo ""
 echo -e "${yellow}〔X-Panel面板〕最新版为---------->>> ${last_version}${plain}"
