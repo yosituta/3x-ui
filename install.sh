@@ -12,31 +12,20 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat net-tools -y
 }
 
-# 核心：硬写入 3x-ui 官方原版管理脚本
+# 核心修复：这个脚本不再自作聪明写菜单，而是完全调用原厂
 create_shortcut() {
+    rm -f /usr/bin/x-ui
     cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
-
-red='\033[0;31m'
-green='\033[0;32m'
-yellow='\033[0;33m'
-plain='\033[0m'
-
-# 这里调用二进制程序，原厂二进制在处理 status/start 时会报错
-# 我们通过脚本逻辑转发给系统服务
 case "\$1" in
+    status) systemctl status x-ui ;;
     start) systemctl start x-ui ;;
     stop) systemctl stop x-ui ;;
     restart) systemctl restart x-ui ;;
-    status) systemctl status x-ui ;;
     enable) systemctl enable x-ui ;;
     disable) systemctl disable x-ui ;;
     log) journalctl -u x-ui -e ;;
-    v2-ui) /usr/local/x-ui/x-ui v2-ui ;;
-    *) 
-        # 如果没有参数，直接调用原厂二进制的交互模式 (main 模式)
-        /usr/local/x-ui/x-ui main "\$@" 
-        ;;
+    *) /usr/local/x-ui/x-ui "\$@" ;;
 esac
 EOF
     chmod +x /usr/bin/x-ui
@@ -49,7 +38,7 @@ show_install_info() {
     local panel_port=${config_port:-54321}
     local safe_path=${config_base_path}
     
-    echo -e "\n${green}3x-ui 安装成功，原厂管理菜单已就绪${plain}"
+    echo -e "\n${green}3x-ui 安装成功！${plain}"
     echo -e "------------------------------------------------------"
     echo -e "SSH 隧道命令: ${yellow}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
     echo -e "浏览器访问: ${green}http://127.0.0.1:${local_port}${safe_path}${plain}"
@@ -85,7 +74,6 @@ install_x-ui() {
     [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
     [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
 
-    # 初始化配置
     /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
     systemctl restart x-ui
 
