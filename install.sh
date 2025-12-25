@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ==========================================================
-# 3x-UI Old Free Version One-Click Install Script (Fixed for syntax)
-# Usage: bash install-fixed.sh (amd64 Linux only, no updates)
+# 3x-UI 旧免费版本一键安装脚本 (yosituta/3x-ui main, amd64 only)
+# 使用: wget https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh && bash install.sh
 # ==========================================================
 
 red='\033[0;31m'
@@ -11,11 +11,11 @@ blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
-# check root (Fixed: single $EUID, no double $$)
-[[ $EUID -ne 0 ]] && echo -e "${red}Please run as root (sudo bash install-fixed.sh)${plain}\n" && exit 1
+# check root
+[[ $EUID -ne 0 ]] && echo -e "${red}Please run as root (sudo bash install.sh)${plain}\n" && exit 1
 
 # ----------------------------------------------------------
-# OS and Arch Check (amd64 only)
+# OS 和架构检查 (仅 amd64)
 # ----------------------------------------------------------
 if [[ -f /etc/os-release ]]; then
     source /etc/os-release
@@ -42,7 +42,7 @@ if [[ "${release}" == "ubuntu" && ${os_version} -lt 20 ]] || [[ "${release}" == 
 fi
 
 # ----------------------------------------------------------
-# Install Base Dependencies
+# 安装基础依赖
 # ----------------------------------------------------------
 install_base() {
     case "${release}" in
@@ -59,14 +59,14 @@ install_base() {
 }
 
 # ----------------------------------------------------------
-# Generate Random Credentials
+# 生成随机凭证
 # ----------------------------------------------------------
 gen_random_string() {
     LC_ALL=C tr -dc 'a-zA-Z0-9' < /dev/urandom | fold -w "${1:-16}" | head -n 1
 }
 
 # ----------------------------------------------------------
-# Install Logic
+# 安装逻辑 (修复: 用临时名下载二进制, 正确创建目录)
 # ----------------------------------------------------------
 install_3xui() {
     echo -e "${green}Installing 3x-UI Old Free Version (amd64 only, no updates)${plain}"
@@ -75,23 +75,27 @@ install_3xui() {
     install_base
 
     cd /usr/local/
-    # Stop and remove old version
+    # 停止并移除旧版
     systemctl stop x-ui 2>/dev/null || true
     rm -rf x-ui
 
-    # Download files (Fixed: single variables)
+    # 下载文件 (修复: 二进制用临时名, 避免覆盖目录)
     echo -e "${green}Downloading components...${plain}"
     wget -N --no-check-certificate "${repo_url}/x-ui.sh" -O /usr/bin/x-ui && chmod +x /usr/bin/x-ui
-    wget -N --no-check-certificate "${repo_url}/x-ui" -O x-ui && chmod +x x-ui
+    wget -N --no-check-certificate "${repo_url}/x-ui" -O x-ui-binary && chmod +x x-ui-binary
     wget -N --no-check-certificate "${repo_url}/x-ui.service" -O x-ui.service
 
+    # 创建目录并移动二进制
     mkdir -p x-ui/bin
+    mv x-ui-binary x-ui/x-ui
     cd x-ui
+
+    # 下载 bin 文件
     wget -N --no-check-certificate "${repo_url}/bin/xray-linux-amd64" -O bin/xray-linux-amd64 && chmod +x bin/xray-linux-amd64
     wget -N --no-check-certificate "${repo_url}/bin/geoip.dat" -O bin/geoip.dat || true
     wget -N --no-check-certificate "${repo_url}/bin/geosite.dat" -O bin/geosite.dat || true
 
-    # systemd service (Fixed heredoc)
+    # systemd 服务 (修复: 单引号 heredoc 避免扩展)
     cp ../x-ui.service /etc/systemd/system/
     cat > /etc/systemd/system/x-ui.service << 'SERVICE_EOF'
 [Unit]
@@ -110,10 +114,10 @@ SERVICE_EOF
     systemctl enable x-ui
     systemctl start x-ui
 
-    # Set random default credentials
+    # 设置随机凭证
     username=$(gen_random_string 8)
     password=$(gen_random_string 12)
-    /usr/local/x-ui/x-ui setting -username "${username}" -password "${password}" -port 54321
+    ./x-ui setting -username "${username}" -password "${password}" -port 54321
 
     echo -e "${green}Installation complete!${plain}"
     echo -e "Panel URL: http://$(curl -s ifconfig.me):54321"
@@ -123,8 +127,5 @@ SERVICE_EOF
     echo -e "${blue}Management: x-ui start/stop/restart/status${plain}"
 }
 
-# Run
+# 运行
 install_3xui
-EOF
-
-chmod +x install-fixed.sh
