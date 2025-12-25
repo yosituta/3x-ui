@@ -799,26 +799,29 @@ update_geo() {
     before_show_menu
 }
 
-install_acme() { 
-    # 检查是否已安装 acme.sh
-    if command -v ~/.acme.sh/acme.sh &>/dev/null; then 
-        LOGI "acme.sh 已经安装。" 
-        return 0 
-    fi 
- 
-    LOGI "正在安装 acme.sh..." 
-    cd ~ || return 1 # 确保可以切换到主目录
- 
-    curl -s https://get.acme.sh | sh 
-    if [ $? -ne 0 ]; then 
-        LOGE "安装 acme.sh 失败。" 
-        return 1 
-    else 
-        LOGI "安装 acme.sh 成功。" 
-    fi 
- 
-    return 0 
-} 
+install_acme() {
+    if [ -f ~/.acme.sh/acme.sh ]; then
+        return 0
+    fi
+    echo -e "${yellow}正在安装 acme.sh，请稍等...${plain}"
+    cd ~
+    # 主方式
+    if curl https://get.acme.sh | sh; then
+        echo -e "${green}acme.sh 安装成功！${plain}"
+    else
+        echo -e "${red}主方式安装失败，尝试备用 GitHub 下载...${plain}"
+        # 备用方式（避免 get.acme.sh 被墙）
+        if wget -O - https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh; then
+            echo -e "${green}备用方式安装成功！${plain}"
+        else
+            echo -e "${red}acme.sh 安装失败！请检查网络或手动安装：${plain}"
+            echo -e "${green}curl https://get.acme.sh | sh${plain}"
+            echo -e "${green}或：wget -O - https://raw.githubusercontent.com/acmesh-official/acme.sh/master/acme.sh | sh${plain}"
+            return 1
+        fi
+    fi
+    source ~/.bashrc  # 立即生效
+}
 
 ssl_cert_issue_main() { 
     echo -e "${green}\t1.${plain} 获取 SSL 证书" 
