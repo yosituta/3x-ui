@@ -1,9 +1,8 @@
-cat > install-fixed.sh << 'EOF'
 #!/bin/bash
 
 # ==========================================================
-# 3x-UI Old Free Version One-Click Install Script (yosituta/3x-ui main, amd64 only)
-# Usage: bash install-fixed.sh
+# 3x-UI Old Free Version One-Click Install Script (Fixed for syntax)
+# Usage: bash install-fixed.sh (amd64 Linux only, no updates)
 # ==========================================================
 
 red='\033[0;31m'
@@ -12,7 +11,7 @@ blue='\033[0;34m'
 yellow='\033[0;33m'
 plain='\033[0m'
 
-# check root
+# check root (Fixed: single $EUID, no double $$)
 [[ $EUID -ne 0 ]] && echo -e "${red}Please run as root (sudo bash install-fixed.sh)${plain}\n" && exit 1
 
 # ----------------------------------------------------------
@@ -80,7 +79,7 @@ install_3xui() {
     systemctl stop x-ui 2>/dev/null || true
     rm -rf x-ui
 
-    # Download files
+    # Download files (Fixed: single variables)
     echo -e "${green}Downloading components...${plain}"
     wget -N --no-check-certificate "${repo_url}/x-ui.sh" -O /usr/bin/x-ui && chmod +x /usr/bin/x-ui
     wget -N --no-check-certificate "${repo_url}/x-ui" -O x-ui && chmod +x x-ui
@@ -92,7 +91,7 @@ install_3xui() {
     wget -N --no-check-certificate "${repo_url}/bin/geoip.dat" -O bin/geoip.dat || true
     wget -N --no-check-certificate "${repo_url}/bin/geosite.dat" -O bin/geosite.dat || true
 
-    # systemd service
+    # systemd service (Fixed heredoc)
     cp ../x-ui.service /etc/systemd/system/
     cat > /etc/systemd/system/x-ui.service << 'SERVICE_EOF'
 [Unit]
@@ -127,4 +126,5 @@ SERVICE_EOF
 # Run
 install_3xui
 EOF
+
 chmod +x install-fixed.sh
