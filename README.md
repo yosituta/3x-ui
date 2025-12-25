@@ -8,6 +8,7 @@ curl -L https://raw.githubusercontent.com/yosituta/3x-ui/main/install-xui.sh | b
 
 ## 访问
 http://你的IP:54321/（默认路径/，或自定义）
+admin/admin
 
 ## 版本
 v25.9.25 (通用x86_64/ARM64)。
