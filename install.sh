@@ -12,20 +12,25 @@ install_base() {
     apt update -y && apt install wget curl tar cron socat net-tools -y
 }
 
-# 终极修复：绝对不再创建自定义菜单，直接链接原厂程序
+# 核心修复：强制链接你项目压缩包里的彩色 x-ui.sh 脚本
 create_shortcut() {
+    # 1. 彻底删除可能存在的任何冲突
     rm -f /usr/bin/x-ui
-    # 创建一个极简转发脚本，如果是 status 就走系统，其他全部走原厂二进制
-    cat > /usr/bin/x-ui <<EOF
+    
+    # 2. 检查压缩包里解压出来的 x-ui.sh 是否存在
+    if [[ -f "/usr/local/x-ui/x-ui.sh" ]]; then
+        chmod +x /usr/local/x-ui/x-ui.sh
+        # 强制创建软链接，让 x-ui 命令直接运行这个彩色脚本
+        ln -sf /usr/local/x-ui/x-ui.sh /usr/bin/x-ui
+        echo -e "${green}已成功链接原厂彩色管理脚本！${plain}"
+    else
+        # 兜底：如果文件不存在，创建一个跳转脚本
+        cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
-if [[ "\$1" == "status" ]]; then
-    systemctl status x-ui
-else
-    # 执行原厂二进制，不带参数时它会自动弹出原厂菜单
-    /usr/local/x-ui/x-ui "\$@"
-fi
+/usr/local/x-ui/x-ui "\$@"
 EOF
-    chmod +x /usr/bin/x-ui
+        chmod +x /usr/bin/x-ui
+    fi
 }
 
 show_install_info() {
@@ -47,14 +52,20 @@ install_x-ui() {
     arch=$(arch)
     [[ $arch == "x86_64" || $arch == "amd64" ]] && arch="amd64" || arch="arm64"
     
+    # 从你的项目仓库下载
     last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     wget -N "https://github.com/yosituta/3x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz"
     
-    rm -rf /usr/local/x-ui/ && mkdir -p /usr/local/x-ui/
+    rm -rf /usr/local/x-ui/
+    # 解压到 /usr/local/
     tar zxvf x-ui-linux-${arch}.tar.gz -C /usr/local/
     rm x-ui-linux-${arch}.tar.gz -f
     
     cd /usr/local/x-ui/
+    chmod +x x-ui bin/xray-linux-${arch}
+    # 确保解压出来的脚本有执行权限
+    [[ -f "x-ui.sh" ]] && chmod +x x-ui.sh
+    
     cp -f x-ui.service /etc/systemd/system/
     systemctl daemon-reload && systemctl enable x-ui && systemctl start x-ui
     
