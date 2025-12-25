@@ -8,107 +8,100 @@ plain='\033[0m'
 # check root
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
-# check os
-if [[ -f /etc/redhat-release ]]; then
-    release="centos"
-elif cat /etc/issue | grep -Eqi "debian"; then
-    release="debian"
-elif cat /etc/issue | grep -Eqi "ubuntu"; then
-    release="ubuntu"
-else
-    release="debian"
-fi
-
-arch=$(arch)
-[[ $arch == "x86_64" || $arch == "x64" || $arch == "amd64" ]] && arch="amd64"
-[[ $arch == "aarch64" || $arch == "arm64" ]] && arch="arm64"
-
-os_version=$(awk -F'[= "]+' '/VERSION_ID/{print $2}' /etc/os-release | cut -d'.' -f1)
-
 install_base() {
-    if [[ x"${release}" == x"centos" ]]; then
-        yum install epel-release -y
-        yum install wget curl tar crontabs socat -y
-    else
-        apt update -y
-        apt install wget curl tar cron socat -y
-    fi
+    apt update -y && apt install wget curl tar cron socat -y
 }
 
-# 关键：调用原厂菜单脚本
+# 还原原厂风格菜单并修复快捷键
 create_shortcut() {
-    # 3x-ui 官方包解压后通常带有一个 x-ui.sh
-    # 我们将其链接到 /usr/bin/x-ui
-    if [[ -f /usr/local/x-ui/x-ui.sh ]]; then
-        chmod +x /usr/local/x-ui/x-ui.sh
-        ln -sf /usr/local/x-ui/x-ui.sh /usr/bin/x-ui
-    else
-        # 如果源码没带，我们手动创建一个能调出原厂二进制设置显示的脚本
-        cat > /usr/bin/x-ui <<EOF
+    rm -f /usr/bin/x-ui
+    cat > /usr/bin/x-ui <<EOF
 #!/bin/bash
-/usr/local/x-ui/x-ui "\$@"
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
+
+show_menu() {
+    echo -e "\${green}3x-ui 面板管理脚本\${plain}"
+    echo -e "--- 基础管理 ---"
+    echo -e "\${green}1.\${plain} 启动面板      \${green}2.\${plain} 停止面板"
+    echo -e "\${green}3.\${plain} 重启面板      \${green}4.\${plain} 查看状态"
+    echo -e "--- 配置管理 ---"
+    echo -e "\${green}10.\${plain} 查看当前设置"
+    echo -e "\${green}11.\${plain} 修改账户密码"
+    echo -e "\${green}12.\${plain} 修改面板端口"
+    echo -e "\${green}0.\${plain} 退出菜单"
+    echo -e "----------------"
+    read -p "选择 [0-12]: " num
+    case "\$num" in
+        1) systemctl start x-ui ;;
+        2) systemctl stop x-ui ;;
+        3) systemctl restart x-ui ;;
+        4) systemctl status x-ui ;;
+        10) /usr/local/x-ui/x-ui setting -show ;;
+        11) read -p "用户: " u && read -p "密码: " p && /usr/local/x-ui/x-ui setting -username \$u -password \$p && systemctl restart x-ui ;;
+        12) read -p "端口: " port && /usr/local/x-ui/x-ui setting -port \$port && systemctl restart x-ui ;;
+        0) exit 0 ;;
+        *) /usr/local/x-ui/x-ui "\$@" ;;
+    esac
+}
+
+[[ \$# -gt 0 ]] && /usr/local/x-ui/x-ui "\$@" || show_menu
 EOF
-        chmod +x /usr/bin/x-ui
-    fi
+    chmod +x /usr/bin/x-ui
 }
 
 show_install_info() {
-    local vps_ip=$(curl -s4m 8 https://api.ipify.org || curl -s4m 8 https://checkip.amazonaws.com)
-    [[ -z "${vps_ip}" ]] && vps_ip=$(curl -s6m 8 https://api64.ipify.org)
+    # 智能获取 IP：IPv4 优先，无则 IPv6
+    local vps_ip=$(curl -s4m 8 https://api.ipify.org || curl -s6m 8 https://api64.ipify.org)
+    [[ "$vps_ip" == *":"* ]] && vps_ip="[$vps_ip]" # 格式化 IPv6
     
-    local local_port=$((RANDOM % 50001 + 10000))
+    local local_port=$((RANDOM % 40000 + 20000))
     local panel_port=${config_port:-54321}
     local display_path=${config_base_path:-"/"}
 
-    echo -e "\n${green}3x-ui 安装完成，原厂菜单已恢复${plain}"
-    echo -e "#####################################################"
-    echo -e "${yellow}用户名 : ${plain} ${config_account}"
-    echo -e "${yellow}密  码 : ${plain} ${config_password}"
-    echo -e "${yellow}访问路径: ${plain} ${display_path}"
-    echo -e "#####################################################"
-    echo -e "--- SSH 隧道安全访问指令 ---"
-    echo -e "${cyan}1. 复制此命令并在本地运行: ${green}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
-    echo -e "${cyan}2. 浏览器访问: ${green}http://127.0.0.1:${local_port}${display_path}${plain}"
-}
-
-config_after_install() {
-    read -p "确认是否修改设置 [y/n] (默认 n): " config_confirm
-    if [[ x"${config_confirm}" == x"y" || x"${config_confirm}" == x"Y" ]]; then
-        read -p "设置账户名: " config_account
-        read -p "设置密码: " config_password
-        read -p "设置端口: " config_port
-        read -p "设置路径 (例: /test/): " config_base_path
-        [[ -z "${config_base_path}" ]] && config_base_path="/"
-        [[ "${config_base_path:0:1}" != "/" ]] && config_base_path="/${config_base_path}"
-        [[ "${config_base_path: -1}" != "/" ]] && config_base_path="${config_base_path}/"
-        # 强制设置一次，确保面板启动
-        /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
-    else
-        config_account="admin"
-        config_password="admin"
-        config_port="54321"
-        config_base_path="/"
-    fi
+    echo -e "\n${green}面板安装成功！${plain}"
+    echo -e "------------------------------------------------------"
+    echo -e "请在本地电脑执行此命令（按回车确认）:"
+    echo -e "${yellow}ssh -L ${local_port}:127.0.0.1:${panel_port} root@${vps_ip}${plain}"
+    echo -e "------------------------------------------------------"
+    echo -e "登录地址: ${green}http://127.0.0.1:${local_port}${display_path}${plain}"
+    echo -e "用户名: ${green}${config_account}${plain} | 密码: ${green}${config_password}${plain}"
+    echo -e "------------------------------------------------------"
 }
 
 install_x-ui() {
     systemctl stop x-ui 2>/dev/null
-    cd /usr/local/
-    last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
-    package_url="https://github.com/yosituta/3x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz"
+    arch=$(arch)
+    [[ $arch == "x86_64" || $arch == "amd64" ]] && arch="amd64" || arch="arm64"
     
-    rm -rf /usr/local/x-ui/
-    wget -N --no-check-certificate -O /usr/local/x-ui-linux-${arch}.tar.gz ${package_url}
-    tar zxvf x-ui-linux-${arch}.tar.gz
+    last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
+    wget -N "https://github.com/yosituta/3x-ui/releases/download/${last_version}/x-ui-linux-${arch}.tar.gz"
+    
+    rm -rf /usr/local/x-ui/ && mkdir -p /usr/local/x-ui/
+    tar zxvf x-ui-linux-${arch}.tar.gz -C /usr/local/
     rm x-ui-linux-${arch}.tar.gz -f
-    cd x-ui
-    chmod +x x-ui bin/xray-linux-${arch}
+    
+    cd /usr/local/x-ui/
     cp -f x-ui.service /etc/systemd/system/
-    systemctl daemon-reload
-    systemctl enable x-ui
-    systemctl start x-ui
+    systemctl daemon-reload && systemctl enable x-ui && systemctl start x-ui
+    
+    # 引导设置
+    echo -e "${yellow}设置面板参数：${plain}"
+    read -p "账户 (默认 admin): " config_account
+    [[ -z "$config_account" ]] && config_account="admin"
+    read -p "密码 (默认 admin): " config_password
+    [[ -z "$config_password" ]] && config_password="admin"
+    read -p "端口 (默认 2025): " config_port
+    [[ -z "$config_port" ]] && config_port="2025"
+    read -p "路径 (须以/开头并结尾，例如 /forcoo/): " config_base_path
+    [[ -z "$config_base_path" ]] && config_base_path="/"
 
-    config_after_install
+    # 执行设置
+    /usr/local/x-ui/x-ui setting -username ${config_account} -password ${config_password} -port ${config_port} -webBasePath ${config_base_path}
+    systemctl restart x-ui
+
     create_shortcut
     show_install_info
 }
