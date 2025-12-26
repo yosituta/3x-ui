@@ -35,3 +35,32 @@ rm -rf /root/.acme.sh/
 
 清理完成后，重启服务器更保险（可选）：
 reboot
+
+## xray启动不了的解决方式
+在终端直接运行以下命令（一步步复制执行）：
+# 1. 先停止服务，防止反复重启占用资源
+systemctl stop x-ui
+
+# 2. 清除错误的证书路径配置（关键一步！）
+/usr/local/x-ui/x-ui setting -certFile "" -keyFile ""
+
+# 或者用这个命令直接禁用 TLS（效果一样）
+# /usr/local/x-ui/x-ui setting -tls false
+
+# 3. 重启服务
+systemctl restart x-ui
+
+# 4. 检查服务状态
+systemctl status x-ui
+
+执行完第 4 步，你应该看到类似：
+x-ui.service - x-ui Service
+   Active: active (running)
+
+验证是否成功
+  输入 x-ui 进入菜单
+  选 14 检查面板状态
+  现在应该显示：
+  面板状态: 运行中
+  开机启动: 是
+  Xray状态: 未运行   ← 这还是正常的！因为你还没添加节点
