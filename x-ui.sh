@@ -154,18 +154,31 @@ install() {
 }
 
 update() {
-    confirm "$(echo -e "${green}该功能将强制安装最新版本，并且数据不会丢失。${red}你想继续吗？${plain}---->>请输入")" "y"
-    if [[ $? != 0 ]]; then
-        LOGE "已取消"
-        if [[ $# == 0 ]]; then
-            before_show_menu
-        fi
+    # 获取当前版本和最新版本
+    local current_version=$(/usr/local/x-ui/x-ui -v 2>/dev/null || echo "未知")
+    local last_version=$(curl -Ls "https://api.github.com/repos/yosituta/3x-ui/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/' || echo "未知")
+
+    if [[ "$current_version" == "$last_version" || -z "$last_version" ]]; then
+        echo -e "${green}当前已是最新版本（v${current_version}），无需更新！${plain}"
+        before_show_menu
         return 0
     fi
+
+    echo -e "${yellow}检测到新版本：v${last_version}（当前 v${current_version}）${plain}"
+    confirm "$(echo -e "${green}是否要更新到最新版本？数据不会丢失。${plain} (y/n)")" "y"
+    if [[ $? != 0 ]]; then
+        echo -e "${red}已取消更新${plain}"
+        before_show_menu
+        return 0
+    fi
+
+    # 执行更新
     bash <(curl -Ls https://raw.githubusercontent.com/yosituta/3x-ui/main/install.sh)
     if [[ $? == 0 ]]; then
-        LOGI "更新完成，面板已自动重启"
+        echo -e "${green}更新完成，面板已自动重启${plain}"
         exit 0
+    else
+        echo -e "${red}更新失败，请检查日志${plain}"
     fi
 }
 
